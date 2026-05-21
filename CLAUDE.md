@@ -38,3 +38,9 @@ mcmc-simulator/
 - Never change the MH engine to "simplify" the math — it must match Eq 6.1
 - Never use non-log-space in the acceptance step (numerical underflow)
 - Never break the SamplingProblem interface
+
+## Environment
+- Conda env: mcmc (Python 3.12)
+- Activate with: conda activate mcmc
+- Key deps: numpy, scipy, matplotlib, pandas, pytest
+- No external API calls anywhere in this project — fully local/offline
