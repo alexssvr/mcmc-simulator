@@ -88,28 +88,26 @@ indices = np.linspace(0, len(samples) - 1, n_show, dtype=int)
 # Magnetization trace
 magnetizations = [float(np.sum(g)) / (N * N) for g in samples]
 
-fig, axes = plt.subplots(2, n_show, figsize=(2.5 * n_show, 5))
+fig = plt.figure(figsize=(max(10, 2.5 * n_show), 7))
 
+# Top row: grid snapshots
 for col, idx in enumerate(indices):
-    ax = axes[0, col]
+    ax = fig.add_subplot(2, n_show, col + 1)
     ax.imshow(samples[idx], cmap="RdBu", vmin=-1, vmax=1, interpolation="nearest")
     ax.set_title(f"Step {idx + BURN_IN}", fontsize=8)
     ax.axis("off")
 
-ax_trace = axes[1, :]
-# Merge bottom row into one axes for the trace
-for ax in ax_trace[1:]:
-    ax.set_visible(False)
-ax_trace[0].set_position([0.08, 0.08, 0.88, 0.38])
-ax_trace[0].plot(magnetizations, color="steelblue", linewidth=0.8, alpha=0.9)
-ax_trace[0].axhline(0, color="crimson", linewidth=1, linestyle="--", label="M = 0")
-ax_trace[0].set_xlabel("Sample index (post burn-in)")
-ax_trace[0].set_ylabel("Magnetization M = Σσ / N²")
-ax_trace[0].set_title(
+# Bottom row: full-width magnetization trace
+ax_trace = fig.add_subplot(2, 1, 2)
+ax_trace.plot(magnetizations, color="steelblue", linewidth=0.8, alpha=0.9)
+ax_trace.axhline(0, color="crimson", linewidth=1, linestyle="--", label="M = 0")
+ax_trace.set_xlabel("Sample index (post burn-in)")
+ax_trace.set_ylabel("Magnetization M = Σσ / N²")
+ax_trace.set_title(
     f"Ising {N}×{N}, β={BETA}  |  acc={acc:.3f}  ESS={ess:.0f}",
     fontsize=10,
 )
-ax_trace[0].legend(fontsize=8)
+ax_trace.legend(fontsize=8)
 
 plt.tight_layout()
 out_path = "output/ising_results.png"
