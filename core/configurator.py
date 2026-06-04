@@ -45,8 +45,8 @@ class ProblemSpec:
     Attributes
     ----------
     problem_type : str
-        One of ``'discrete_graph'``, ``'continuous_data'``,
-        ``'continuous_formula'``, or ``'path'``.
+        One of ``'weighted_discrete'``, ``'discrete_graph'``,
+        ``'continuous_data'``, ``'continuous_formula'``, or ``'path'``.
     state_space_type : str
         Inferred from ``problem_type``: ``'discrete'``, ``'continuous'``,
         or ``'path'``.
@@ -88,6 +88,7 @@ class ProblemSpec:
 
 _STATE_SPACE_MAP: dict[str, str] = {
     "discrete_graph":      "discrete",
+    "weighted_discrete":   "discrete",
     "continuous_data":     "continuous",
     "continuous_formula":  "continuous",
     "path":                "path",
@@ -241,7 +242,8 @@ class ProblemConfigurator:
         else:
             value = input(
                 "Problem type? "
-                "(discrete_graph / continuous_data / continuous_formula / path): "
+                "(weighted_discrete / discrete_graph / continuous_data / "
+                "continuous_formula / path): "
             ).strip()
 
         if value not in _VALID_PROBLEM_TYPES:

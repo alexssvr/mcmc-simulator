@@ -52,10 +52,12 @@ from scipy.stats import gaussian_kde
 
 from core.classifier import ProposalClassifier
 from core.configurator import ProblemConfigurator, ProblemSpec
+from core.diagnostics import autocorrelation, effective_sample_size
 from core.mh import MetropolisHastings
 from core.problem import SamplingProblem
 from problems.continuous import DataDrivenProblem, FormulaProblem
 from problems.discrete import DiscreteGraphProblem
+from problems.weighted_discrete import WeightedDiscreteProblem
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +371,25 @@ class MCMCSampler:
                 notes=spec.notes,
             )
 
+        if pt == "weighted_discrete":
+            states = config.get("states")
+            weights = config.get("weights")
+            if states is None:
+                raise ValueError(
+                    "Key 'states' (list) is required in config for "
+                    "'weighted_discrete' problems."
+                )
+            if weights is None:
+                raise ValueError(
+                    "Key 'weights' (list[float]) is required in config for "
+                    "'weighted_discrete' problems."
+                )
+            return WeightedDiscreteProblem(
+                states=states,
+                weights=weights,
+                notes=spec.notes,
+            )
+
         if pt == "path":
             raise NotImplementedError(
                 "'path' problems are not yet implemented. "
@@ -382,7 +403,7 @@ class MCMCSampler:
     # ------------------------------------------------------------------
 
     def _compute_diagnostics(
-        self, samples: list, acceptance_rate: float
+        self, samples: list, acceptance_rate_val: float
     ) -> dict[str, Any]:
         """Compute acceptance rate, ESS, and the autocorrelations used.
 
@@ -390,7 +411,7 @@ class MCMCSampler:
         ----------
         samples : list
             Post-burn-in chain states.
-        acceptance_rate : float
+        acceptance_rate_val : float
             From :attr:`~core.mh.MetropolisHastings.acceptance_rate`.
 
         Returns
@@ -399,118 +420,12 @@ class MCMCSampler:
             Keys: ``acceptance_rate``, ``effective_sample_size``,
             ``n_samples``, ``autocorrelations``.
         """
-        n: int = len(samples)
-        ess, acf = self._compute_ess(samples)
         return {
-            "acceptance_rate":       acceptance_rate,
-            "effective_sample_size": ess,
-            "n_samples":             n,
-            "autocorrelations":      acf,
+            "acceptance_rate":       acceptance_rate_val,
+            "effective_sample_size": effective_sample_size(samples),
+            "n_samples":             len(samples),
+            "autocorrelations":      autocorrelation(samples),
         }
-
-    # ------------------------------------------------------------------
-    # ESS helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _to_array(samples: list) -> np.ndarray:
-        """Convert a heterogeneous list of states to a float numpy array.
-
-        * ``float`` states → shape ``(n,)``
-        * ``numpy.ndarray`` states → shape ``(n, d)``
-        * ``dict`` states → sorted values → shape ``(n, |V|)``
-        """
-        if not samples:
-            return np.array([], dtype=float)
-        first = samples[0]
-        if isinstance(first, dict):
-            keys = sorted(first.keys())
-            return np.array(
-                [[s[k] for k in keys] for s in samples], dtype=float
-            )
-        return np.asarray(samples, dtype=float)
-
-    @staticmethod
-    def _acf_truncated(x: np.ndarray, max_lag: int) -> tuple[list[float], float]:
-        """Compute normalized ACF at lags 1..max_lag, stopping at first ≤ 0 lag.
-
-        Uses the *initial positive sequence* estimator (Geyer 1992): sum only
-        contiguous positive autocorrelations starting from lag 1.  This avoids
-        over-estimating the sum when the ACF oscillates or is noisy.
-
-        Returns
-        -------
-        acf : list[float]
-            Autocorrelations at lags 1, 2, … up to the cutoff.
-        rho_sum : float
-            Sum of all returned autocorrelations (used directly in ESS).
-        """
-        n = len(x)
-        x = x - x.mean()
-        var = float(x.var())
-        if var < 1e-12:
-            return [], 0.0
-
-        cap = min(max_lag, n // 3)
-        acf: list[float] = []
-        rho_sum = 0.0
-        for k in range(1, cap + 1):
-            rho = float(np.mean(x[: n - k] * x[k:])) / var
-            if rho <= 0.0:
-                break
-            acf.append(rho)
-            rho_sum += rho
-        return acf, rho_sum
-
-    @classmethod
-    def _compute_ess(
-        cls, samples: list, max_lag: int = 100
-    ) -> tuple[float, list[float]]:
-        """Compute effective sample size using truncated positive-sequence ACF.
-
-        For multi-dimensional states, ESS is computed per dimension; the
-        minimum (most conservative) is returned together with the ACF that
-        produced it.
-
-        Formula::
-
-            ESS = n / (1 + 2 · Σ ρ_k)
-
-        Parameters
-        ----------
-        samples : list
-            Post-burn-in states.
-        max_lag : int
-            Maximum lag to consider before forcing truncation.
-
-        Returns
-        -------
-        ess : float
-            Effective sample size, clamped to ``[1, n]``.
-        acf : list[float]
-            Autocorrelations used for the returned ESS.
-        """
-        arr = cls._to_array(samples)
-        n = len(arr)
-        if n == 0:
-            return 0.0, []
-
-        if arr.ndim == 1:
-            acf, rho_sum = cls._acf_truncated(arr, max_lag)
-            ess = n / (1.0 + 2.0 * rho_sum)
-            return max(1.0, min(float(n), ess)), acf
-
-        # Multi-D: minimum ESS over all dimensions
-        best_ess = float("inf")
-        best_acf: list[float] = []
-        for d in range(arr.shape[1]):
-            acf_d, rho_sum_d = cls._acf_truncated(arr[:, d], max_lag)
-            ess_d = n / (1.0 + 2.0 * rho_sum_d)
-            if ess_d < best_ess:
-                best_ess = ess_d
-                best_acf = acf_d
-
-        return max(1.0, min(float(n), best_ess)), best_acf
 
     # ------------------------------------------------------------------
     # Plot helpers
